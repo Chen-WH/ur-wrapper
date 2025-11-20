@@ -69,14 +69,17 @@ TIP: joint_states话题下顺序是2-6,最后是1，注意！
 
 [UR Client Library Documentation](https://docs.universal-robots.com/Universal_Robots_ROS2_Documentation/doc/ur_client_library/doc/index.html#ur-client-library)
 
+1. Install the driver
+
 ```shell
 sudo apt install ros-$ROS_DISTRO-ur-client-library
 ```
 
-1. 位置伺服
+2. 编译功能包
 
-MODE_SERVOJ，可以参考full_driver.cpp
+```shell
+ros2 run ur-wrapper home
+```
 
-2. 速度/加速度前馈
 
-MOVEJ，可以参考trajectory_point_interface.cpp
+
