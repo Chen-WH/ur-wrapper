@@ -20,7 +20,7 @@
 using namespace urcl;
 
 const std::string DEFAULT_ROBOT_IP = "192.168.125.6";
-
+std::unique_ptr<ExampleRobotWrapper> g_my_robot;
 trajectory_msgs::msg::JointTrajectory traj_msg;
 vector6d_t joint_state = {0, 0, 0, 0, 0, 0};
 size_t current_trajectory_index = 0;
@@ -36,7 +36,7 @@ void trajectory_callback(const trajectory_msgs::msg::JointTrajectory::SharedPtr 
     for (size_t i = 0; i < traj_msg.points.size(); ++i) {
         double diff = 0.0;
         for (size_t j = 0; j < 6; ++j) {
-            diff += std::abs(traj_msg.points[i].positions[j] - joint_command.jVal[j]);
+            diff += std::abs(traj_msg.points[i].positions[j] - joint_state[j]);
         }
         if (diff < min_diff) {
             min_diff = diff;
@@ -55,11 +55,26 @@ int main(int argc, char *argv[])
     auto trajectory_subscriber = node->create_subscription<trajectory_msgs::msg::JointTrajectory>("/joint_trajectory", 1, trajectory_callback);
     auto joint_state_publisher = node->create_publisher<sensor_msgs::msg::JointState>("/current_states", 1);
 
-    JAKAZuRobot robot;
-    RobotStatus robstatus;
-    robot.login_in("192.168.125.3");
-    robot.power_on();
-    robot.enable_robot();
+    urcl::setLogLevel(urcl::LogLevel::INFO);
+    std::string robot_ip = DEFAULT_ROBOT_IP;
+
+    bool headless_mode = true;
+    // Resolve resource files from the installed package share directory so the
+    // binary can find them regardless of working directory.
+    std::string pkg_share = ament_index_cpp::get_package_share_directory("ur-wrapper");
+    std::string script_file = pkg_share + "/resources/external_control.urscript";
+    std::string output_recipe = pkg_share + "/resources/rtde_output_recipe.txt";
+    std::string input_recipe = pkg_share + "/resources/rtde_input_recipe.txt";
+
+    g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, output_recipe, input_recipe, headless_mode,
+                                                     "external_control.urp", script_file);
+    if (!g_my_robot->isHealthy())
+    {
+        URCL_LOG_ERROR("Something in the robot initialization went wrong. Exiting. Please check the output above.");
+        return 1;
+    }
+    // --------------- INITIALIZATION END -------------------
+    
     sensor_msgs::msg::JointState joint_state_msg;
     JointValue joint_state, joint_state_old, joint_velocity;
     robot.get_joint_position(&joint_state);
