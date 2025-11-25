@@ -1,148 +1,209 @@
-#include <ur_client_library/example_robot_wrapper.h>
-#include <ur_client_library/ur/dashboard_client.h>
-#include <ur_client_library/ur/ur_driver.h>
-#include <ur_client_library/types.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
+
+#include <ur_client_library/example_robot_wrapper.h>
+#include <ur_client_library/ur/ur_driver.h>
+#include <ur_client_library/types.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-#include <iostream>
 #include <memory>
-#include <unistd.h>
-#include <cmath>
-#include <limits>
-#include <fstream>
+#include <thread>
+#include <mutex>
+#include <vector>
 #include <chrono>
-#include <iomanip>
-#include <sstream>
 
-using namespace urcl;
+using namespace std::chrono_literals;
 
-const std::string DEFAULT_ROBOT_IP = "192.168.125.6";
-std::unique_ptr<ExampleRobotWrapper> g_my_robot;
-trajectory_msgs::msg::JointTrajectory traj_msg;
-vector6d_t joint_state = {0, 0, 0, 0, 0, 0};
-size_t current_trajectory_index = 0;
-bool trajectory_received = false;
-
-void trajectory_callback(const trajectory_msgs::msg::JointTrajectory::SharedPtr msg) {
-    traj_msg = *msg;
-    current_trajectory_index = 0;
-    trajectory_received = true; // 标记轨迹已接收
-
-    // Find the point with the smallest joint angle difference
-    double min_diff = std::numeric_limits<double>::max();
-    for (size_t i = 0; i < traj_msg.points.size(); ++i) {
-        double diff = 0.0;
-        for (size_t j = 0; j < 6; ++j) {
-            diff += std::abs(traj_msg.points[i].positions[j] - joint_state[j]);
-        }
-        if (diff < min_diff) {
-            min_diff = diff;
-            current_trajectory_index = i + 1;
-        } else {
-            break;
-        }
-    }
-}
-
-int main(int argc, char *argv[])
+class UrMpcNode : public rclcpp::Node
 {
-    rclcpp::init(argc, argv);
-    auto node = rclcpp::Node::make_shared("mpc_publisher");
+public:
+  UrMpcNode()
+  : Node("ur_mpc_node")
+  {
+    this->declare_parameter<std::string>("robot_ip", "192.168.125.6");
+    std::string robot_ip = this->get_parameter("robot_ip").as_string();
 
-    auto trajectory_subscriber = node->create_subscription<trajectory_msgs::msg::JointTrajectory>("/joint_trajectory", 1, trajectory_callback);
-    auto joint_state_publisher = node->create_publisher<sensor_msgs::msg::JointState>("/current_states", 1);
+    // ROS publishers/subscriptions
+    joint_state_pub_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_state", 10);
+    traj_sub_ = this->create_subscription<trajectory_msgs::msg::JointTrajectory>(
+      "/joint_trajectory", 10, std::bind(&UrMpcNode::trajectory_callback, this, std::placeholders::_1));
+    target_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
+      "/joint_target", 10, std::bind(&UrMpcNode::target_callback, this, std::placeholders::_1));
 
-    urcl::setLogLevel(urcl::LogLevel::INFO);
-    std::string robot_ip = DEFAULT_ROBOT_IP;
-
-    bool headless_mode = true;
     // Resolve resource files from the installed package share directory so the
-    // binary can find them regardless of working directory.
     std::string pkg_share = ament_index_cpp::get_package_share_directory("ur-wrapper");
     std::string script_file = pkg_share + "/resources/external_control.urscript";
     std::string output_recipe = pkg_share + "/resources/rtde_output_recipe.txt";
     std::string input_recipe = pkg_share + "/resources/rtde_input_recipe.txt";
 
-    g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, output_recipe, input_recipe, headless_mode,
-                                                     "external_control.urp", script_file);
-    if (!g_my_robot->isHealthy())
+    bool headless_mode = true;
+    robot_ = std::make_unique<urcl::ExampleRobotWrapper>(robot_ip, output_recipe, input_recipe, headless_mode,
+                               "external_control.urp", script_file);
+    if (!robot_->isHealthy())
     {
-        URCL_LOG_ERROR("Something in the robot initialization went wrong. Exiting. Please check the output above.");
-        return 1;
-    }
-    // --------------- INITIALIZATION END -------------------
-    
-    sensor_msgs::msg::JointState joint_state_msg;
-    JointValue joint_state, joint_state_old, joint_velocity;
-    robot.get_joint_position(&joint_state);
-    joint_command = joint_state;
-    robot.servo_move_enable(TRUE);
-    sleep(2);
-
-    std::stringstream ss;
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    ss << "data_" << std::put_time(std::localtime(&in_time_t), "%H%M%S") << ".csv";
-    std::ofstream csv_file(ss.str());
-
-    // Write CSV header
-    csv_file << "command_position,command_velocity,command_torque,state_position,state_velocity,state_current,\n";
-
-    rclcpp::Rate loop_rate(62.5);
-    while (rclcpp::ok()) {
-        std::cout << "Main Loop :" << std::endl;
-        joint_state_old = joint_state;
-        robot.get_joint_position(&joint_state);
-        robot.get_robot_status(&robstatus);
-
-        // Calculate joint velocities
-        for (int i = 0; i < 6; ++i) {
-            joint_velocity.jVal[i] = (joint_state.jVal[i] - joint_state_old.jVal[i]) / 0.016;
-        }
-
-        // Publish joint states
-        joint_state_msg.header.stamp = node->now();
-        joint_state_msg.position = {joint_state.jVal[0], joint_state.jVal[1], joint_state.jVal[2], joint_state.jVal[3], joint_state.jVal[4], joint_state.jVal[5]};
-        joint_state_msg.velocity = {joint_velocity.jVal[0], joint_velocity.jVal[1], joint_velocity.jVal[2], joint_velocity.jVal[3], joint_velocity.jVal[4], joint_velocity.jVal[5]};
-        joint_state_publisher->publish(joint_state_msg);
-
-        if (trajectory_received) {
-            if (current_trajectory_index < traj_msg.points.size()) {
-                for (int j = 0; j < 6; j++) {
-                    joint_command.jVal[j] = traj_msg.points[current_trajectory_index].positions[j];
-                }
-                robot.servo_j(&joint_command, ABS, 2);
-
-                // Record joint_command to CSV
-                for (int j = 0; j < 6; j++) {
-                    csv_file << traj_msg.points[current_trajectory_index].positions[j] << "," 
-                             << traj_msg.points[current_trajectory_index].velocities[j] << "," 
-                             << traj_msg.points[current_trajectory_index].effort[j] << "," 
-                             << joint_state.jVal[j] << "," 
-                             << joint_velocity.jVal[j] << "," 
-                             << robstatus.robot_monitor_data.jointMonitorData[j].instCurrent;
-                    if (j < 5) csv_file << ",";
-                }
-                csv_file << "\n";
-                ++current_trajectory_index;
-            } else {
-                std::cout << "Trajectory completed" << std::endl;
-                break;
-            }
-        }
-        rclcpp::spin_some(node);
-        loop_rate.sleep();
+      RCLCPP_ERROR(this->get_logger(), "Robot wrapper initialization failed");
+      throw std::runtime_error("Robot init failed");
     }
 
-    sleep(2);
-    robot.servo_move_enable(FALSE);
-    sleep(1);
-    robot.login_out();
+    trajectory_received_ = false;
+    current_trajectory_index_ = 0;
 
-    csv_file.close();
-    rclcpp::shutdown();
-    return 0;
+    // start RTDE comm and driver loop in a background thread
+    driver_thread_ = std::thread(&UrMpcNode::driverLoop, this);
+  }
+
+  ~UrMpcNode()
+  {
+    if (robot_ && robot_->getUrDriver())
+    {
+      robot_->getUrDriver()->stopControl();
+    }
+    if (driver_thread_.joinable())
+      driver_thread_.join();
+  }
+
+private:
+  void trajectory_callback(const trajectory_msgs::msg::JointTrajectory::SharedPtr msg)
+  {
+    std::lock_guard<std::mutex> lk(mutex_);
+    trajectory_ = *msg;
+    counter_ = 0;
+    current_trajectory_index_ = 0;
+    trajectory_received_ = true;
+
+    // choose starting index similar to python logic: find first point close to current target
+    double min_diff = std::numeric_limits<double>::infinity();
+    size_t best_i = 0;
+    for (size_t i = 0; i < trajectory_.points.size(); ++i)
+    {
+      double diff = 0.0;
+      const auto &p = trajectory_.points[i];
+      for (size_t j = 0; j < p.positions.size(); ++j)
+        diff += std::abs(p.positions[j] - position_command_[j]);
+      if (diff < min_diff)
+      {
+        min_diff = diff;
+        best_i = i;
+      }
+      else
+      {
+        break;
+      }
+    }
+    current_trajectory_index_ = best_i + 1;
+  }
+
+  void target_callback(const sensor_msgs::msg::JointState::SharedPtr msg)
+  {
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (msg->position.size() >= 6)
+    {
+      for (size_t i = 0; i < 6; ++i)
+        position_target_[i] = msg->position[i];
+    }
+  }
+
+  void driverLoop()
+  {
+    // Start RTDE communication
+    robot_->getUrDriver()->startRTDECommunication();
+
+    while (rclcpp::ok())
+    {
+      // Get latest package (blocks with timeout inside driver)
+      auto data_pkg = robot_->getUrDriver()->getDataPackage();
+      if (!data_pkg)
+      {
+        RCLCPP_WARN(this->get_logger(), "Could not get fresh data package from robot");
+        std::this_thread::sleep_for(10ms);
+        continue;
+      }
+
+      urcl::vector6d_t actual_q;
+      if (!data_pkg->getData("actual_q", actual_q))
+      {
+        RCLCPP_ERROR(this->get_logger(), "Received data package has no 'actual_q'");
+        std::this_thread::sleep_for(10ms);
+        continue;
+      }
+
+      // publish joint state
+      sensor_msgs::msg::JointState js;
+      js.header.stamp = this->now();
+      js.position.resize(6);
+      for (size_t i = 0; i < 6; ++i)
+        js.position[i] = actual_q[i];
+      joint_state_pub_->publish(js);
+
+      // decide command to send
+      urcl::vector6d_t joint_cmd;
+      {
+        std::lock_guard<std::mutex> lk(mutex_);
+        if (trajectory_received_)
+        {
+          if (current_trajectory_index_ < trajectory_.points.size())
+          {
+            const auto &pt = trajectory_.points[current_trajectory_index_++];
+            for (size_t i = 0; i < 6; ++i) position_command_[i] = pt.positions[i];
+          }
+          else
+          {
+            RCLCPP_ERROR(this->get_logger(), "Trajectory exhausted without new trajectory");
+          }
+        }
+        else
+        {
+          for (size_t i = 0; i < 6; ++i) position_command_[i] = js.position[i];
+        }
+        for (size_t i = 0; i < 6; ++i) joint_cmd[i] = position_command_[i];
+      }
+
+      // send joint command using UR client library
+      bool ret = robot_->getUrDriver()->writeJointCommand(joint_cmd, urcl::comm::ControlMode::MODE_SERVOJ,
+                                                          urcl::RobotReceiveTimeout::millisec(100));
+      if (!ret)
+      {
+        RCLCPP_ERROR(this->get_logger(), "Could not send joint command. Is the robot in remote control?");
+      }
+
+      // small sleep to avoid busy loop
+      std::this_thread::sleep_for(8ms);
+    }
+  }
+
+  // members
+  std::unique_ptr<urcl::ExampleRobotWrapper> robot_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
+  rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_pub_;
+  rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr traj_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr target_sub_;
+
+  std::thread driver_thread_;
+  std::mutex mutex_;
+
+  trajectory_msgs::msg::JointTrajectory trajectory_;
+  bool trajectory_received_ = false;
+  size_t current_trajectory_index_ = 0;
+  int counter_ = 0;
+
+  std::array<double,6> position_target_ = {0, -M_PI_2, 0, -M_PI_2, 0, 0};
+  std::array<double,6> position_command_ = {0, -M_PI_2, 0, -M_PI_2, 0, 0};
+};
+
+int main(int argc, char **argv)
+{
+  rclcpp::init(argc, argv);
+  try
+  {
+    auto node = std::make_shared<UrMpcNode>();
+    rclcpp::spin(node);
+  }
+  catch (const std::exception &e)
+  {
+    RCLCPP_FATAL(rclcpp::get_logger("rclcpp"), "Exception in UrMpcNode: %s", e.what());
+  }
+  rclcpp::shutdown();
+  return 0;
 }

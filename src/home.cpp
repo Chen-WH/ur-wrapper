@@ -62,7 +62,7 @@ int main(int argc, char* argv[])
   // --------------- INITIALIZATION END -------------------
 
   std::cout << "请输入目标关节角 (6 个，弧度)，用空格分隔，例如: 0 -1.57 0 -1.57 0 0\n";
-  std::cout << "直接回车则使用默认角: 0 -1.57 0 -1.57 0 0。输入 q 退出。\n> ";
+  std::cout << "直接回车则使用默认角: 0 -pi/2 0 -pi/2 0 0。输入 q 退出。\n> ";
   std::string line;
   if (!std::getline(std::cin, line))
     return 0;
@@ -73,8 +73,8 @@ int main(int argc, char* argv[])
   if (line.empty())
   {
     // 使用用户要求的默认初始关节角
-    target_joint = {0, -1.57, 0, -1.57, 0, 0};
-    std::cout << "使用默认目标关节角: 0 -1.57 0 -1.57 0 0\n";
+    target_joint = {0, -M_PI_2, 0, -M_PI_2, 0, 0};
+    std::cout << "使用默认目标关节角: 0 -pi/2 0 -pi/2 0 0\n";
   }
   else
   {
