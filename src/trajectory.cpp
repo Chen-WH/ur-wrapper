@@ -1,12 +1,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
-#include <rosgraph_msgs/msg/clock.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <ur_client_library/example_robot_wrapper.h>
 #include <ur_client_library/ur/ur_driver.h>
 #include <ur_client_library/types.h>
-#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <memory>
 #include <thread>
@@ -27,10 +26,8 @@ public:
 
     // ROS publishers/subscriptions
     joint_state_pub_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_state", 10);
-    traj_sub_ = this->create_subscription<trajectory_msgs::msg::JointTrajectory>(
-      "/joint_trajectory", 10, std::bind(&UrMpcNode::trajectory_callback, this, std::placeholders::_1));
-    target_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
-      "/joint_target", 10, std::bind(&UrMpcNode::target_callback, this, std::placeholders::_1));
+    traj_sub_ = this->create_subscription<trajectory_msgs::msg::JointTrajectory>("/joint_trajectory", 10, std::bind(&UrMpcNode::trajectory_callback, this, std::placeholders::_1));
+    target_sub_ = this->create_subscription<sensor_msgs::msg::JointState>("/joint_target", 10, std::bind(&UrMpcNode::target_callback, this, std::placeholders::_1));
 
     // Resolve resource files from the installed package share directory so the
     std::string pkg_share = ament_index_cpp::get_package_share_directory("ur-wrapper");
@@ -176,7 +173,6 @@ private:
   // members
   std::unique_ptr<urcl::ExampleRobotWrapper> robot_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
-  rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_pub_;
   rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr traj_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr target_sub_;
 

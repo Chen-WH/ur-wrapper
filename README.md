@@ -78,7 +78,9 @@ sudo apt install ros-$ROS_DISTRO-ur-client-library
 2. 编译功能包
 
 ```shell
-ros2 run ur-wrapper home
+ros2 run ur-wrapper home # 插补到指定关节角
+ros2 run ur-wrapper trajectory # 轨迹跟踪，轨迹的规划频率低于125Hz，轨迹点频率125Hz
+ros2 run ur-wrapper point # 125Hz的持续关节点跟踪
 ```
 
 

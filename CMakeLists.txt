@@ -19,9 +19,13 @@ add_executable(home src/home.cpp)
 target_link_libraries(home ur_client_library::urcl)
 ament_target_dependencies(home rclcpp ament_index_cpp)
 
-add_executable(mpc src/mpc.cpp)
-target_link_libraries(mpc ur_client_library::urcl)
-ament_target_dependencies(mpc rclcpp sensor_msgs trajectory_msgs ament_index_cpp)
+#add_executable(point src/point.cpp)
+#target_link_libraries(point ur_client_library::urcl)
+#ament_target_dependencies(point rclcpp sensor_msgs trajectory_msgs ament_index_cpp)
+
+add_executable(trajectory src/trajectory.cpp)
+target_link_libraries(trajectory ur_client_library::urcl)
+ament_target_dependencies(trajectory rclcpp sensor_msgs trajectory_msgs ament_index_cpp)
 
 # Ensure resources are available in the build tree (so running from build/ finds them)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/resources DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
@@ -34,7 +38,8 @@ install(DIRECTORY resources
 # 安装可执行文件
 install(TARGETS
     home
-    mpc
+#    point
+    trajectory
   DESTINATION lib/${PROJECT_NAME}
 )
 
