@@ -1,4 +1,4 @@
-# ur_wrappers
+# ur-wrapper
 
 ## 1 Setup PC
 
@@ -19,12 +19,12 @@ DNS: 192.168.125.1
 ping 192.168.125.6
 ```
 
-## 2* ROS2 Driver
+**推荐使用Sec 3中的UR_RTDE，方便且高性能**
 
-推荐优先使用Sec 3中的C++ SDK
+## 2 Universal_Robots_ROS2_Driver
 
-[UR ROS2 Driver](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
-[UR ROS2 Driver Documentation](https://docs.universal-robots.com/Universal_Robots_ROS2_Documentation/index.html)
+[GitHub Page](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
+[Documentation](https://docs.universal-robots.com/Universal_Robots_ROS2_Documentation/index.html)
 
 1. Install the driver
 
@@ -63,11 +63,29 @@ ros2 topic echo /joint_states
 
 TIP: joint_states话题下顺序是2-6,最后是1，注意！
 
-## 3 Client Library
+## 3 UR_RTDE
 
-[UR Client Library](https://github.com/UniversalRobots/Universal_Robots_Client_Library)
+[Documentation](https://sdurobotics.gitlab.io/ur_rtde/index.html)
 
-[UR Client Library Documentation](https://docs.universal-robots.com/Universal_Robots_ROS2_Documentation/doc/ur_client_library/doc/index.html#ur-client-library)
+1. Install the library
+
+```shell
+sudo add-apt-repository ppa:sdurobotics/ur-rtde
+sudo apt-get update
+sudo apt install librtde librtde-devhttps://sdurobotics.gitlab.io/ur_rtde/index.html)
+```
+
+2. If you only want to the use the Python interface, you can install ur_rtde through pip:
+
+```shell
+pip install --user ur_rtde
+```
+
+## 4 Universal_Robots_Client_Library
+
+[GitHub Page](https://github.com/UniversalRobots/Universal_Robots_Client_Library)
+
+[Documentation](https://docs.universal-robots.com/Universal_Robots_ROS2_Documentation/doc/ur_client_library/doc/index.html#ur-client-library)
 
 1. Install the driver
 
@@ -80,8 +98,5 @@ sudo apt install ros-$ROS_DISTRO-ur-client-library
 ```shell
 ros2 run ur-wrapper home # 插补到指定关节角
 ros2 run ur-wrapper trajectory # 轨迹跟踪，轨迹的规划频率低于125Hz，轨迹点频率125Hz
-ros2 run ur-wrapper point # 125Hz的持续关节点跟踪
+ros2 run ur-wrapper p2p # 30Hz的点到点任务，使用内置样条规划器
 ```
-
-
-

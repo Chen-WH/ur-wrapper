@@ -14,18 +14,10 @@ find_package(trajectory_msgs REQUIRED)
 find_package(ur_client_library REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 
-# Executable Creation
+# Executable Creation URCL Examples
 add_executable(home src/home.cpp)
 target_link_libraries(home ur_client_library::urcl)
 ament_target_dependencies(home rclcpp ament_index_cpp)
-
-#add_executable(p2p src/p2p.cpp)
-#target_link_libraries(p2p ur_client_library::urcl)
-#ament_target_dependencies(p2p rclcpp sensor_msgs ament_index_cpp)
-
-#add_executable(point src/point.cpp)
-#target_link_libraries(point ur_client_library::urcl)
-#ament_target_dependencies(point rclcpp sensor_msgs trajectory_msgs ament_index_cpp)
 
 add_executable(trajectory src/trajectory.cpp)
 target_link_libraries(trajectory ur_client_library::urcl)
@@ -42,8 +34,6 @@ install(DIRECTORY resources
 # 安装可执行文件
 install(TARGETS
     home
-#    p2p
-#    point
     trajectory
   DESTINATION lib/${PROJECT_NAME}
 )
