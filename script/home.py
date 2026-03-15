@@ -9,6 +9,6 @@ rtde_c = rtde_control.RTDEControlInterface(ROBOT_IP)
 
 actual_q = rtde_r.getActualQ()
 print(actual_q)
-rtde_c.moveJ([-0.5, 0.5, -pi/2-0.5, -pi/2, 0, 0], 0.5, 0.5)
+rtde_c.moveJ([0, -pi/2, 0, -pi/2, 0, 0], 0.5, 0.5)
 actual_q = rtde_r.getActualQ()
 print(actual_q)
